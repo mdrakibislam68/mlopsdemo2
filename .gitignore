@@ -1,0 +1,30 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Generated model binaries and local prediction outputs
+models/*.pkl
+models/*.joblib
+models/*.json
+data/*.csv
+!data/README.md
+!models/README.md
+
+# OS / IDE files
+.DS_Store
+.vscode/
+.idea/
+
