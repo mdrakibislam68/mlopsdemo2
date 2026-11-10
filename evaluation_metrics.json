@@ -2,37 +2,37 @@
   "best_model_name": "LinearRegression",
   "selection_metric": "rmse",
   "registered_model_name": "house-price-predictor",
-  "registered_version": "3",
+  "registered_version": "4",
   "models_comparison": {
     "LinearRegression": {
       "test_metrics": {
-        "mae": 18338.0139,
-        "mse": 582611308.3752,
-        "rmse": 24137.3426,
-        "r2_score": 0.9746
+        "mae": 18226.9068,
+        "mse": 563093927.8257,
+        "rmse": 23729.6002,
+        "r2_score": 0.9769
       },
       "train_metrics": {
-        "mae": 17716.9295,
-        "mse": 541016066.8053,
-        "rmse": 23259.7521,
-        "r2_score": 0.9755
+        "mae": 17519.6256,
+        "mse": 524520250.0958,
+        "rmse": 22902.4071,
+        "r2_score": 0.976
       },
-      "run_id": "add039b510df4223a8035177eec3575e"
+      "run_id": "6d4116e855004e78b8ea975fe40d9ebb"
     },
     "RandomForestRegressor": {
       "test_metrics": {
-        "mae": 19619.6633,
-        "mse": 627125320.2085,
-        "rmse": 25042.4703,
-        "r2_score": 0.9726
+        "mae": 18676.0136,
+        "mse": 573030686.9636,
+        "rmse": 23938.0594,
+        "r2_score": 0.9765
       },
       "train_metrics": {
-        "mae": 9962.3532,
-        "mse": 184318650.5869,
-        "rmse": 13576.4005,
-        "r2_score": 0.9917
+        "mae": 9163.6922,
+        "mse": 145394101.8625,
+        "rmse": 12057.9477,
+        "r2_score": 0.9933
       },
-      "run_id": "35daa7550b4b49bb8b1b27d1227dcc16"
+      "run_id": "54542b61f28047a2b3978d9ee57f2585"
     }
   }
 }
