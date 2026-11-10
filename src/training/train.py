@@ -33,7 +33,7 @@ os.environ["MLFLOW_DISABLE_AGENT_HINT"] = "1"
 
 def setup_mlflow(experiment_name: str) -> None:
     """Configure MLflow tracking URI and experiment with responsive fallback."""
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5001")
 
     # If an HTTP URL is specified, test connectivity with a fast timeout
     if tracking_uri.startswith("http"):
@@ -42,6 +42,12 @@ def setup_mlflow(experiment_name: str) -> None:
         try:
             req = urllib.request.Request(tracking_uri, method="GET")
             urllib.request.urlopen(req, timeout=1.5)
+            # Ensure MinIO/S3 defaults work seamlessly when running `dvc repro` directly on host
+            if "localhost" in tracking_uri or "127.0.0.1" in tracking_uri:
+                os.environ.setdefault("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
+                os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
+                os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "minioadmin")
+                os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
         except Exception:
             print(
                 f"[MLflow] Server at {tracking_uri} not reachable; falling back to local SQLite 'sqlite:///mlflow.db'."

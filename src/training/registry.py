@@ -25,7 +25,9 @@ def register_and_promote_model(
 
     Returns the new model version number as string, or None if failed.
     """
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+    tracking_uri = mlflow.get_tracking_uri() or os.getenv(
+        "MLFLOW_TRACKING_URI", "http://localhost:5001"
+    )
     mlflow.set_tracking_uri(tracking_uri)
     client = MlflowClient(tracking_uri=tracking_uri)
 

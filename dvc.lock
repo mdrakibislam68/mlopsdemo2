@@ -5,11 +5,11 @@ stages:
     deps:
     - path: data/raw/housing.csv
       hash: md5
-      md5: a8deb0a083a9e673f6b26082035c36b8
-      size: 119378
+      md5: 08bacafd5d2cedf64a2ab7b0ea648db0
+      size: 221665
     - path: params.yaml
       hash: md5
-      md5: 1968a791ac3452c352f0300dc45989c4
+      md5: 865fb88575d2fe27a7fea481cab9f7b7
       size: 1305
     - path: src/data/validate_data.py
       hash: md5
@@ -20,11 +20,11 @@ stages:
     deps:
     - path: data/raw/housing.csv
       hash: md5
-      md5: a8deb0a083a9e673f6b26082035c36b8
-      size: 119378
+      md5: 08bacafd5d2cedf64a2ab7b0ea648db0
+      size: 221665
     - path: params.yaml
       hash: md5
-      md5: 1968a791ac3452c352f0300dc45989c4
+      md5: 865fb88575d2fe27a7fea481cab9f7b7
       size: 1305
     - path: src/data/preprocess.py
       hash: md5
@@ -33,34 +33,34 @@ stages:
     outs:
     - path: data/processed/preprocessor.joblib
       hash: md5
-      md5: 79aecc8b7e22bd2867ada184ffbbf6f6
+      md5: fab686ae2297580fb45192043a83cb4d
       size: 4362
     - path: data/processed/test.csv
       hash: md5
-      md5: 234815eb5fbb13c0054018d1c647b0ab
-      size: 82743
+      md5: 4b8a582e98182ed9011866327da48aff
+      size: 154762
     - path: data/processed/train.csv
       hash: md5
-      md5: 11b9e48b6c5e6efe2521998933dfff59
-      size: 330602
+      md5: 2e687fe77ccfd129c1f19d5e48104e2c
+      size: 618577
   train_and_evaluate:
     cmd: python src/training/train.py --config params.yaml
     deps:
     - path: data/processed/preprocessor.joblib
       hash: md5
-      md5: 79aecc8b7e22bd2867ada184ffbbf6f6
+      md5: fab686ae2297580fb45192043a83cb4d
       size: 4362
     - path: data/processed/test.csv
       hash: md5
-      md5: 234815eb5fbb13c0054018d1c647b0ab
-      size: 82743
+      md5: 4b8a582e98182ed9011866327da48aff
+      size: 154762
     - path: data/processed/train.csv
       hash: md5
-      md5: 11b9e48b6c5e6efe2521998933dfff59
-      size: 330602
+      md5: 2e687fe77ccfd129c1f19d5e48104e2c
+      size: 618577
     - path: params.yaml
       hash: md5
-      md5: 1968a791ac3452c352f0300dc45989c4
+      md5: 865fb88575d2fe27a7fea481cab9f7b7
       size: 1305
     - path: src/evaluation/evaluate.py
       hash: md5
@@ -68,14 +68,14 @@ stages:
       size: 945
     - path: src/training/train.py
       hash: md5
-      md5: f86fefffd213721da3f0d96c0a15291d
-      size: 10206
+      md5: 1569c8c2896a9326b6bd309c07c3af1d
+      size: 10692
     outs:
     - path: evaluation_metrics.json
       hash: md5
-      md5: 0f2622aeb0bdcf6a321a052b0f62ad65
-      size: 940
+      md5: f8bd0796ce9138a67ab5b15d211a28ba
+      size: 944
     - path: models/best_model.joblib
       hash: md5
-      md5: ad781953bbab43ea6c4a53d9f571d2cf
-      size: 1127
+      md5: 086b1201b5c8015d7ab8f88d924460c4
+      size: 16371889

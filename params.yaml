@@ -5,7 +5,7 @@ base:
   random_state: 101
 
 data_generation:
-  num_samples: 3500
+  num_samples: 6505
   noise_factor: 14000.0
   raw_data_path: "data/raw/housing.csv"
 
