@@ -1,0 +1,81 @@
+name: MLOps Continuous Integration
+
+on:
+  push:
+    branches: [ main, master, "feat/*", "fix/*" ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  code-quality-and-tests:
+    name: Lint, Test & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint codebase with Ruff
+        run: |
+          ruff check src/ api/ tests/
+
+      - name: Validate data pipeline & preprocessing
+        run: |
+          python src/data/generate_data.py --config params.yaml
+          python src/data/validate_data.py --config params.yaml
+          python src/data/preprocess.py --config params.yaml
+
+      - name: Train and evaluate baseline model
+        run: |
+          python src/training/train.py --config params.yaml
+
+      - name: Run Pytest test suite
+        run: |
+          pytest -v --durations=10
+
+      - name: Upload trained model and reference dataset for Docker build
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlops-build-artifacts
+          path: |
+            models/
+            data/raw/housing.csv
+
+  build-docker-image:
+    name: Build & Verify Docker Image
+    needs: code-quality-and-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download trained model and reference dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: mlops-build-artifacts
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build FastAPI Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: mlops-fastapi-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+

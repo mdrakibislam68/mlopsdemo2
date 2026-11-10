@@ -1,0 +1,38 @@
+{
+  "best_model_name": "LinearRegression",
+  "selection_metric": "rmse",
+  "registered_model_name": "house-price-predictor",
+  "registered_version": "3",
+  "models_comparison": {
+    "LinearRegression": {
+      "test_metrics": {
+        "mae": 18338.0139,
+        "mse": 582611308.3752,
+        "rmse": 24137.3426,
+        "r2_score": 0.9746
+      },
+      "train_metrics": {
+        "mae": 17716.9295,
+        "mse": 541016066.8053,
+        "rmse": 23259.7521,
+        "r2_score": 0.9755
+      },
+      "run_id": "add039b510df4223a8035177eec3575e"
+    },
+    "RandomForestRegressor": {
+      "test_metrics": {
+        "mae": 19619.6633,
+        "mse": 627125320.2085,
+        "rmse": 25042.4703,
+        "r2_score": 0.9726
+      },
+      "train_metrics": {
+        "mae": 9962.3532,
+        "mse": 184318650.5869,
+        "rmse": 13576.4005,
+        "r2_score": 0.9917
+      },
+      "run_id": "35daa7550b4b49bb8b1b27d1227dcc16"
+    }
+  }
+}

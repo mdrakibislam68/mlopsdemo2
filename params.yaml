@@ -1,0 +1,62 @@
+# MLOps Lab Pipeline Parameters & Configuration
+
+base:
+  project_name: "mlops-lab-house-prices"
+  random_state: 42
+
+data_generation:
+  num_samples: 2000
+  noise_factor: 15000.0
+  raw_data_path: "data/raw/housing.csv"
+
+data_validation:
+  required_columns:
+    - area
+    - bedrooms
+    - bathrooms
+    - location
+    - age
+    - garage
+    - price
+  numerical_columns:
+    - area
+    - bedrooms
+    - bathrooms
+    - age
+    - garage
+  categorical_columns:
+    - location
+  target_column: "price"
+  ranges:
+    area: [300, 10000]
+    bedrooms: [1, 10]
+    bathrooms: [1.0, 8.0]
+    age: [0, 100]
+    garage: [0, 5]
+    price: [30000, 3000000]
+
+preprocessing:
+  test_size: 0.2
+  processed_dir: "data/processed"
+  train_data_path: "data/processed/train.csv"
+  test_data_path: "data/processed/test.csv"
+  preprocessor_path: "data/processed/preprocessor.joblib"
+
+training:
+  models:
+    linear_regression:
+      fit_intercept: true
+    random_forest:
+      n_estimators: 100
+      max_depth: 12
+      min_samples_split: 4
+      min_samples_leaf: 2
+      random_state: 42
+  primary_metric: "rmse"  # Selection criterion: lower is better
+  experiment_name: "house-price-prediction"
+  registered_model_name: "house-price-predictor"
+
+monitoring:
+  drift_significance_level: 0.05
+  ks_test_pvalue_threshold: 0.05
+

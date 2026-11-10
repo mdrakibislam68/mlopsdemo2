@@ -1,0 +1,38 @@
+stages:
+  validate:
+    cmd: python src/data/validate_data.py --config params.yaml
+    deps:
+      - data/raw/housing.csv
+      - src/data/validate_data.py
+      - params.yaml
+
+  preprocess:
+    cmd: python src/data/preprocess.py --config params.yaml
+    deps:
+      - data/raw/housing.csv
+      - src/data/preprocess.py
+      - params.yaml
+    outs:
+      - data/processed/train.csv:
+          cache: true
+      - data/processed/test.csv:
+          cache: true
+      - data/processed/preprocessor.joblib:
+          cache: true
+
+  train_and_evaluate:
+    cmd: python src/training/train.py --config params.yaml
+    deps:
+      - data/processed/train.csv
+      - data/processed/test.csv
+      - data/processed/preprocessor.joblib
+      - src/training/train.py
+      - src/evaluation/evaluate.py
+      - params.yaml
+    outs:
+      - models/best_model.joblib:
+          cache: true
+    metrics:
+      - evaluation_metrics.json:
+          cache: false
+

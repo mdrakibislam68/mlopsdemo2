@@ -1,0 +1,201 @@
+services:
+  # -------------------------------------------------------------
+  # 1. PostgreSQL - Metadata Store for MLflow Tracking Server
+  # -------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: mlops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mlflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflowpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-mlflow}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mlflow} -d ${POSTGRES_DB:-mlflow}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mlops-network
+
+  # -------------------------------------------------------------
+  # 2. MinIO (Silo OSS drop-in) - S3-Compatible Object Storage
+  # -------------------------------------------------------------
+  minio:
+    image: pgsty/silo:latest
+    container_name: mlops-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mlops-network
+
+  # -------------------------------------------------------------
+  # 3. MinIO Bucket Initialization (runs once upon startup)
+  # -------------------------------------------------------------
+  minio-init:
+    image: pgsty/mc:latest
+    container_name: mlops-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_DVC_BUCKET: ${MINIO_DVC_BUCKET:-dvc-store}
+      MINIO_MLFLOW_BUCKET: ${MINIO_MLFLOW_BUCKET:-mlflow-artifacts}
+    volumes:
+      - ./docker/minio-init.sh:/minio-init.sh:ro
+    entrypoint: ["/bin/sh", "/minio-init.sh"]
+    networks:
+      - mlops-network
+
+  # -------------------------------------------------------------
+  # 4. MLflow Tracking Server & Model Registry
+  # -------------------------------------------------------------
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mlflow
+    image: mlops-mlflow-server:1.0.0
+    container_name: mlops-mlflow
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${MLFLOW_PORT:-5001}:5000"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mlflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflowpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-mlflow}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_DEFAULT_REGION: us-east-1
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      MINIO_MLFLOW_BUCKET: ${MINIO_MLFLOW_BUCKET:-mlflow-artifacts}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mlops-network
+
+  # -------------------------------------------------------------
+  # 5. FastAPI Prediction Service (Dockerized)
+  # -------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mlops-fastapi-service:1.0.0
+    container_name: mlops-api
+    restart: unless-stopped
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_DEFAULT_REGION: us-east-1
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      MODEL_NAME: ${MODEL_NAME:-house-price-predictor}
+      MODEL_LOCAL_PATH: /app/models/full_pipeline.joblib
+      REFERENCE_DATA_PATH: /app/data/raw/housing.csv
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mlops-network
+
+  # -------------------------------------------------------------
+  # 6. Prometheus - Metrics Collection Engine
+  # -------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: mlops-prometheus
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    networks:
+      - mlops-network
+
+  # -------------------------------------------------------------
+  # 7. Grafana - Visual Dashboards
+  # -------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: mlops-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./configs/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - mlops-network
+
+# -------------------------------------------------------------
+# Persistent Volumes
+# -------------------------------------------------------------
+volumes:
+  postgres_data:
+    name: mlops_postgres_data
+  minio_data:
+    name: mlops_minio_data
+  prometheus_data:
+    name: mlops_prometheus_data
+  grafana_data:
+    name: mlops_grafana_data
+
+# -------------------------------------------------------------
+# Isolated Bridge Network
+# -------------------------------------------------------------
+networks:
+  mlops-network:
+    name: mlops-network
+    driver: bridge
+
