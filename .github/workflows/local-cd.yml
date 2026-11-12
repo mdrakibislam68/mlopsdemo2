@@ -88,6 +88,7 @@ jobs:
           set +a
 
           export MINIO_S3_ENDPOINT="${MINIO_S3_ENDPOINT:-http://localhost:9000}"
+          export MLFLOW_S3_ENDPOINT_URL="${MINIO_S3_ENDPOINT}"
           export MINIO_MLFLOW_BUCKET="${MINIO_MLFLOW_BUCKET:-mlflow-artifacts}"
           export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
           export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
@@ -110,10 +111,43 @@ jobs:
         run: |
           docker compose up -d --build api prometheus grafana
 
-      - name: Load image and rollout restart Kind Kubernetes API (if cluster exists)
+      - name: Log to Kind MLflow, push to Kind MinIO & reload Kind API (if cluster exists)
         if: ${{ inputs.deploy_kind != false }}
         run: |
           if command -v kind >/dev/null 2>&1 && kind get clusters | grep -qx "mlops-lab"; then
+            set -a
+            if [ -f .env ]; then
+              source .env
+            elif [ -f .env.example ]; then
+              source .env.example
+            fi
+            set +a
+
+            export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
+            export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
+            export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+            export MINIO_MLFLOW_BUCKET="${MINIO_MLFLOW_BUCKET:-mlflow-artifacts}"
+            export PATH="${PWD}/.venv/bin:${PATH}"
+
+            if curl -sf http://localhost:30900/minio/health/live >/dev/null 2>&1; then
+              echo "Pushing DVC artifacts and models to Kind MinIO (http://localhost:30900)..."
+              dvc remote modify --local minio-remote endpointurl http://localhost:30900
+              dvc push
+              dvc remote modify --local minio-remote --unset endpointurl
+              MINIO_S3_ENDPOINT="http://localhost:30900" python scripts/push_model_minio.py
+            else
+              echo "Kind MinIO not reachable on localhost:30900; skipping Kind MinIO push."
+            fi
+
+            if curl -sf http://localhost:30500/ >/dev/null 2>&1; then
+              echo "Logging training run and registering champion model in Kind MLflow (http://localhost:30500)..."
+              MLFLOW_TRACKING_URI="http://localhost:30500" \
+              MLFLOW_S3_ENDPOINT_URL="http://localhost:30900" \
+              python src/training/train.py --config params.yaml
+            else
+              echo "Kind MLflow not reachable on localhost:30500; skipping Kind MLflow logging."
+            fi
+
             docker build -t mlops-fastapi-service:1.0.0 .
             kind load docker-image mlops-fastapi-service:1.0.0 --name mlops-lab
             kubectl --context kind-mlops-lab rollout restart deployment/api -n mlops-lab

@@ -43,8 +43,16 @@ def setup_mlflow(experiment_name: str) -> None:
             req = urllib.request.Request(tracking_uri, method="GET")
             urllib.request.urlopen(req, timeout=1.5)
             # Ensure MinIO/S3 defaults work seamlessly when running `dvc repro` directly on host
+            # (even if `.env` was sourced with Docker-internal `http://minio:9000`)
             if "localhost" in tracking_uri or "127.0.0.1" in tracking_uri:
-                os.environ.setdefault("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
+                current_s3 = os.getenv("MLFLOW_S3_ENDPOINT_URL", "")
+                if not current_s3 or current_s3.startswith(("http://minio:", "http://minio.")):
+                    default_s3 = (
+                        "http://localhost:30900"
+                        if ":30500" in tracking_uri
+                        else "http://localhost:9000"
+                    )
+                    os.environ["MLFLOW_S3_ENDPOINT_URL"] = default_s3
                 os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
                 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "minioadmin")
                 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
