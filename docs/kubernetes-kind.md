@@ -114,3 +114,24 @@ make k8s-down
 - **MLflow 403 Forbidden on Kubernetes probes:** `mlflow.yaml` sets `--allowed-hosts "*"` and uses an `exec` (`curl http://localhost:5000/`) probe so kubelet Pod-IP health checks pass.
 - **Postgres PVC `initdb` directory not empty error:** `postgres.yaml` sets `PGDATA=/var/lib/postgresql/data/pgdata` so initialization succeeds even when the volume contains `lost+found`.
 
+---
+
+## 8. GitOps Continuous Delivery with Argo CD
+
+Argo CD watches the `k8s/` directory in `https://github.com/mdrakibislam68/mlopsdemo2.git` (`v2` branch) via [`k8s/argocd/application.yaml`](../k8s/argocd/application.yaml) with `selfHeal: true` and `prune: false` (so secrets and ConfigMaps created by `scripts/k8s_deploy.sh` are preserved).
+
+```bash
+# 1. Make sure Kind cluster & base Secrets/ConfigMaps are running
+make k8s-up
+
+# 2. Install Argo CD into the 'argocd' namespace and apply the Application
+make argocd-up
+
+# 3. Check pod and Application sync status
+make argocd-status
+
+# 4. Print admin password and open the Argo CD UI (https://localhost:8081)
+make argocd-password
+make argocd-ui
+```
+

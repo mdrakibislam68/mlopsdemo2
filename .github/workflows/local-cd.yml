@@ -24,9 +24,8 @@ on:
         required: false
         type: boolean
         default: true
-  # Uncomment below after registering your Mac self-hosted runner in GitHub:
-  # push:
-  #   branches: [ main, v2 ]
+  push:
+    branches: [ main, v2 ]
 
 jobs:
   local-train-push-and-deploy:

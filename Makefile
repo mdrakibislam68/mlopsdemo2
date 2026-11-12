@@ -1,4 +1,4 @@
-.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test k8s-up k8s-down k8s-status k8s-verify clean
+.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test k8s-up k8s-down k8s-status k8s-verify argocd-up argocd-status argocd-password argocd-ui clean
 
 PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
@@ -30,6 +30,10 @@ help:
 	@echo "  make k8s-status    - Show Kind Kubernetes pods, services, and PVCs"
 	@echo "  make k8s-verify    - Verify all Kind Kubernetes NodePorts & live inference"
 	@echo "  make k8s-down      - Delete the Kind Kubernetes cluster"
+	@echo "  make argocd-up     - Install Argo CD on Kind and apply k8s/argocd/application.yaml"
+	@echo "  make argocd-status - Show Argo CD pods and Application sync status"
+	@echo "  make argocd-password - Print initial Argo CD admin password"
+	@echo "  make argocd-ui     - Port-forward Argo CD UI to https://localhost:8081"
 	@echo "  make clean         - Clean temporary cache and log files"
 	@echo "=========================================================================="
 
@@ -116,6 +120,18 @@ k8s-verify:
 
 k8s-down:
 	kind delete cluster --name mlops-lab
+
+argocd-up:
+	bash scripts/argocd_setup.sh
+
+argocd-status:
+	kubectl get pods,applications.argoproj.io -n argocd
+
+argocd-password:
+	@kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo ""
+
+argocd-ui:
+	kubectl port-forward svc/argocd-server -n argocd 8081:443
 
 clean:
 	rm -rf .pytest_cache htmlcov .coverage .ruff_cache
