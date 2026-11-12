@@ -107,12 +107,12 @@ jobs:
           .venv/bin/pytest -v --durations=10
 
       - name: Rebuild and reload Docker Compose API stack
-        if: ${{ inputs.deploy_compose != false }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_compose == true }}
         run: |
           docker compose up -d --build api prometheus grafana
 
       - name: Log to Kind MLflow, push to Kind MinIO & reload Kind API (if cluster exists)
-        if: ${{ inputs.deploy_kind != false }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy_kind == true }}
         run: |
           if command -v kind >/dev/null 2>&1 && kind get clusters | grep -qx "mlops-lab"; then
             set -a
@@ -157,7 +157,7 @@ jobs:
           fi
 
       - name: Verify live services
-        if: ${{ inputs.run_verification != false }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_verification == true }}
         run: |
           if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
             .venv/bin/python scripts/verify_services.py
