@@ -1,0 +1,137 @@
+name: Local CD - Train, Push to Local MinIO & Reload Runtime
+
+# NOTE: This workflow runs on YOUR Mac via a GitHub Actions self-hosted runner
+# so it can reach http://localhost:9000 (local MinIO), http://localhost:5001 (local MLflow),
+# local Docker Compose, and your local Kind Kubernetes cluster (`kind-mlops-lab`).
+#
+# Automatic `push` is commented out until you register your Mac self-hosted runner
+# (see docs/ci-cd.md). Leaving `push` enabled with no online runner would queue jobs.
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_compose:
+        description: "Rebuild and reload local Docker Compose API & monitoring stack"
+        required: false
+        type: boolean
+        default: true
+      deploy_kind:
+        description: "Load rebuilt image and restart API in Kind cluster (if kind-mlops-lab exists)"
+        required: false
+        type: boolean
+        default: true
+      run_verification:
+        description: "Run live verification scripts after deployment"
+        required: false
+        type: boolean
+        default: true
+  # Uncomment below after registering your Mac self-hosted runner in GitHub:
+  # push:
+  #   branches: [ main, v2 ]
+
+jobs:
+  local-train-push-and-deploy:
+    name: Train, Push to Local MinIO & Deploy Locally
+    runs-on: self-hosted
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Ensure Python virtual environment and dependencies
+        run: |
+          if [ ! -d ".venv" ]; then
+            python3 -m venv .venv
+          fi
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+
+      - name: Lint and check formatting
+        run: |
+          .venv/bin/ruff check src/ api/ tests/ scripts/
+          .venv/bin/ruff format --check src/ api/ tests/ scripts/
+
+      - name: Ensure local MinIO and MLflow services are reachable
+        run: |
+          set -a
+          if [ -f .env ]; then
+            source .env
+          elif [ -f .env.example ]; then
+            source .env.example
+          fi
+          set +a
+
+          if ! curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; then
+            echo "Local MinIO not reachable on localhost:9000; starting core Compose services..."
+            docker compose up -d minio minio-init postgres mlflow
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; then
+                echo "Local MinIO is healthy."
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: Local MinIO failed to start on localhost:9000."
+                exit 1
+              fi
+              sleep 2
+            done
+          else
+            echo "Local MinIO is already healthy at http://localhost:9000."
+          fi
+
+      - name: Generate data, run DVC pipeline, train & push to local MinIO
+        run: |
+          set -a
+          if [ -f .env ]; then
+            source .env
+          elif [ -f .env.example ]; then
+            source .env.example
+          fi
+          set +a
+
+          export MINIO_S3_ENDPOINT="${MINIO_S3_ENDPOINT:-http://localhost:9000}"
+          export MINIO_MLFLOW_BUCKET="${MINIO_MLFLOW_BUCKET:-mlflow-artifacts}"
+          export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
+          export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
+          export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+          export MLFLOW_TRACKING_URI="${MLFLOW_TRACKING_URI:-http://localhost:5001}"
+          export PATH="${PWD}/.venv/bin:${PATH}"
+
+          python src/data/generate_data.py --config params.yaml
+          dvc add data/raw/housing.csv
+          dvc repro --force
+          dvc push
+          python scripts/push_model_minio.py
+
+      - name: Run Pytest suite
+        run: |
+          .venv/bin/pytest -v --durations=10
+
+      - name: Rebuild and reload Docker Compose API stack
+        if: ${{ inputs.deploy_compose != false }}
+        run: |
+          docker compose up -d --build api prometheus grafana
+
+      - name: Load image and rollout restart Kind Kubernetes API (if cluster exists)
+        if: ${{ inputs.deploy_kind != false }}
+        run: |
+          if command -v kind >/dev/null 2>&1 && kind get clusters | grep -qx "mlops-lab"; then
+            docker build -t mlops-fastapi-service:1.0.0 .
+            kind load docker-image mlops-fastapi-service:1.0.0 --name mlops-lab
+            kubectl --context kind-mlops-lab rollout restart deployment/api -n mlops-lab
+            kubectl --context kind-mlops-lab rollout status deployment/api -n mlops-lab --timeout=120s
+          else
+            echo "Kind cluster 'mlops-lab' not running; skipping Kind rollout."
+          fi
+
+      - name: Verify live services
+        if: ${{ inputs.run_verification != false }}
+        run: |
+          if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+            .venv/bin/python scripts/verify_services.py
+          else
+            echo "Docker Compose API not listening on localhost:8000; skipping Compose verification."
+          fi
+
+          if command -v kind >/dev/null 2>&1 && kind get clusters | grep -qx "mlops-lab"; then
+            .venv/bin/python scripts/verify_k8s.py
+          fi

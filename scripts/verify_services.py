@@ -5,18 +5,37 @@ reachable and healthy.
 """
 
 import sys
-import os
-import time
+
 import httpx
 
 SERVICES = [
-    {"name": "MinIO S3 API", "url": "http://localhost:9000/minio/health/live", "expected_status": [200]},
+    {
+        "name": "MinIO S3 API",
+        "url": "http://localhost:9000/minio/health/live",
+        "expected_status": [200],
+    },
     {"name": "MinIO Web Console", "url": "http://localhost:9001", "expected_status": [200, 307]},
     {"name": "MLflow Tracking Server", "url": "http://localhost:5001", "expected_status": [200]},
-    {"name": "FastAPI Health Check", "url": "http://localhost:8000/health", "expected_status": [200]},
-    {"name": "FastAPI Metrics Endpoint", "url": "http://localhost:8000/metrics", "expected_status": [200]},
-    {"name": "Prometheus Web UI", "url": "http://localhost:9090/-/healthy", "expected_status": [200]},
-    {"name": "Grafana Dashboard", "url": "http://localhost:3000/api/health", "expected_status": [200]},
+    {
+        "name": "FastAPI Health Check",
+        "url": "http://localhost:8000/health",
+        "expected_status": [200],
+    },
+    {
+        "name": "FastAPI Metrics Endpoint",
+        "url": "http://localhost:8000/metrics",
+        "expected_status": [200],
+    },
+    {
+        "name": "Prometheus Web UI",
+        "url": "http://localhost:9090/-/healthy",
+        "expected_status": [200],
+    },
+    {
+        "name": "Grafana Dashboard",
+        "url": "http://localhost:3000/api/health",
+        "expected_status": [200],
+    },
 ]
 
 
@@ -45,7 +64,9 @@ def verify_services():
         print("  ✓ All Docker Compose Services are running and responsive!")
     else:
         print("  ! Some services are currently unreachable.")
-        print("    If you just ran 'docker compose up', give services ~15s to complete healthchecks.")
+        print(
+            "    If you just ran 'docker compose up', give services ~15s to complete healthchecks."
+        )
     print("----------------------------------------------------------\n")
     return all_ok
 
@@ -53,4 +74,3 @@ def verify_services():
 if __name__ == "__main__":
     success = verify_services()
     sys.exit(0 if success else 1)
-

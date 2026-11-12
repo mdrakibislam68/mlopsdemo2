@@ -1,98 +1,113 @@
-# Continuous Integration (CI) Automation Architecture
+# Continuous Integration & Local Continuous Delivery (CI/CD) Architecture
 
-## 1. What Problem Does CI Solve in Machine Learning?
+## 1. Can GitHub Actions Push Directly to Local MinIO (`localhost:9000`)?
 
-In traditional software development, CI compiles code and runs unit tests. In Machine Learning, breaking changes can be much more elusive:
-- A data scientist changes a feature name in preprocessing, breaking the downstream prediction API.
-- Someone commits code with syntax errors or formatting violations.
-- A library update changes the serialization format of a model.
-- A Dockerfile is modified in a way that breaks container initialization.
+**Short answer:** Not from GitHub's cloud runners (`ubuntu-latest`), **but YES from a free GitHub Actions Self-Hosted Runner on your Mac.**
 
-**Continuous Integration (CI)** runs automatically on every pull request and push to ensure that:
-1. All code adheres to standardized formatting and linting rules.
-2. Unit tests, schema validations, and drift detectors pass.
-3. The end-to-end data pipeline (`generate -> validate -> preprocess -> train`) runs to completion without errors.
-4. The production Docker container compiles cleanly without broken dependencies.
+- **GitHub-Hosted Runner (`ubuntu-latest`):** Runs inside GitHub's cloud infrastructure. Inside that runner, `localhost:9000` refers to the runner itself, not your laptop behind your local network/NAT. Therefore, `ci.yml` spins up an **ephemeral** `pgsty/silo:latest` container inside the runner to verify `dvc push` and `scripts/push_model_minio.py` end-to-end without touching your local disk.
+- **Self-Hosted Runner on Your Mac (`self-hosted`):** Installs the lightweight official open-source GitHub Actions runner agent on your Mac. GitHub still hosts the UI, logs, and triggers (`push` / `workflow_dispatch`), while execution happens directly on your machine—so workflows have native access to your real local MinIO (`http://localhost:9000`), local MLflow (`http://localhost:5001`), Docker Compose stack, and Kind Kubernetes cluster (`kind-mlops-lab`).
+
+*(Avoid exposing `localhost:9000` to the public internet just for CI—keeping a self-hosted runner on your Mac is safer, faster, and completely free.)*
 
 ---
 
-## 2. GitHub Actions CI Workflow Structure
+## 2. Two-Workflow Automation Architecture
 
-Our CI workflow (`.github/workflows/ci.yml`) is split into two sequential jobs:
+| Workflow File | Runner | Trigger | What It Automates |
+| :--- | :--- | :--- | :--- |
+| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | `ubuntu-latest` (GitHub Cloud) | `push` (`main`, `master`, `v2`, `feat/*`, `fix/*`), `pull_request`, `workflow_dispatch` | Ruff lint/format, ephemeral MinIO startup, data generation/validation/preprocessing, training, `dvc push`, `scripts/push_model_minio.py`, 20 Pytest tests, `kubectl kustomize k8s/`, Docker image build (`push: false`) |
+| [`.github/workflows/local-cd.yml`](../.github/workflows/local-cd.yml) | `self-hosted` (Your Mac) | `workflow_dispatch` (and optional `push` once runner is online) | Full pipeline on your Mac: lint, DVC add/repro (`--force`), `dvc push` to local MinIO, `push_model_minio.py` to `s3://mlflow-artifacts/model/`, Pytest, Docker Compose reload, Kind `kind-mlops-lab` image load + rollout restart, live verification scripts |
 
 ```mermaid
 flowchart TD
-    Push["Trigger: git push / pull_request to main"]
-    
-    subgraph Job1["Job 1: Lint, Test & Validate (ubuntu-latest)"]
-        J1_1["actions/checkout@v4"]
-        J1_2["Setup Python 3.11 with pip caching"]
-        J1_3["Install dependencies: pip install -r requirements.txt"]
-        J1_4["Ruff Linter: ruff check src/ api/ tests/"]
-        J1_5["Data Pipeline Check: generate, validate, preprocess"]
-        J1_6["Model Training Baseline Check: python src/training/train.py"]
-        J1_7["Pytest Test Suite: pytest -v"]
+    Push["git push / workflow_dispatch"]
 
-        J1_1 --> J1_2 --> J1_3 --> J1_4 --> J1_5 --> J1_6 --> J1_7
+    subgraph CloudCI["1. Cloud CI (.github/workflows/ci.yml on ubuntu-latest)"]
+        C1["Ruff lint & format check"]
+        C2["Start ephemeral pgsty/silo MinIO + create buckets"]
+        C3["generate -> validate -> preprocess -> train"]
+        C4["dvc add/push + scripts/push_model_minio.py"]
+        C5["pytest -v + kubectl kustomize k8s/ + Docker Buildx"]
+        C1 --> C2 --> C3 --> C4 --> C5
     end
 
-    subgraph Job2["Job 2: Build & Verify Docker Image (ubuntu-latest)"]
-        J2_1["actions/checkout@v4"]
-        J2_2["docker/setup-buildx-action@v3"]
-        J2_3["docker/build-push-action@v5 (push: false)"]
-
-        J2_1 --> J2_2 --> J2_3
+    subgraph LocalCD["2. Local CD (.github/workflows/local-cd.yml on Mac self-hosted)"]
+        L1["Sync .venv & Ruff check"]
+        L2["Verify/start local MinIO (localhost:9000) & MLflow (localhost:5001)"]
+        L3["generate -> dvc add -> dvc repro --force"]
+        L4["dvc push (local s3://dvc-store) + push_model_minio.py (local s3://mlflow-artifacts/model/)"]
+        L5["pytest -v"]
+        L6["Reload Docker Compose & Kind (kind load + rollout restart)"]
+        L7["verify_services.py & verify_k8s.py"]
+        L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7
     end
 
-    Push --> Job1
-    Job1 -->|Success (needs)| Job2
+    Push --> CloudCI
+    Push --> LocalCD
 ```
 
 ---
 
-## 3. Detailed Step Breakdown
+## 3. Setting Up the Free Self-Hosted Runner on Your Mac
 
-### Step 1: Linting with Ruff
-- **Command:** `ruff check src/ api/ tests/`
-- **Role:** Enforces PEP 8 compliance, catches unused imports, detects syntax errors, and validates import ordering.
+Automatic `push` triggers in [`.github/workflows/local-cd.yml`](../.github/workflows/local-cd.yml) start commented out so pushes won't queue indefinitely before your runner is registered. To enable full local automation:
 
-### Step 2: Data Pipeline Validation
-- **Command:**
-  ```bash
-  python src/data/generate_data.py --config params.yaml
-  python src/data/validate_data.py --config params.yaml
-  python src/data/preprocess.py --config params.yaml
-  ```
-- **Role:** Proves that the synthetic data generator, schema validation rules, and feature transformers (`ColumnTransformer`) execute cleanly without runtime crashes.
+1. Open your GitHub repository in the browser:
+   **Settings -> Actions -> Runners -> New self-hosted runner**
+2. Select **macOS** and your chip architecture (**ARM64** for Apple Silicon M1/M2/M3/M4, or **x64** for Intel).
+3. Run the Download & Configure commands GitHub displays in a separate folder (for example `~/actions-runner`, **not** inside your git repo):
+   ```bash
+   mkdir -p ~/actions-runner && cd ~/actions-runner
+   # Paste the curl download + tar extraction commands shown in GitHub UI
+   # Paste ./config.sh --url https://github.com/<owner>/<repo> --token <TOKEN>
+   ```
+4. Start the runner in the foreground (or install it as a background macOS service):
+   ```bash
+   # Foreground (stops when terminal closes):
+   ./run.sh
 
-### Step 3: Model Training Baseline
-- **Command:** `python src/training/train.py --config params.yaml`
-- **Role:** Confirms that Linear Regression and Random Forest models fit properly, metric calculations succeed, and the fallback pipeline artifact is saved.
-
-### Step 4: Pytest Test Suite
-- **Command:** `pytest -v --durations=10`
-- **Role:** Executes the full 20-test automated suite covering data validation, preprocessing, model evaluation metrics, API health, prediction, batch scoring, invalid 422 error tracking, and drift detection.
-
-### Step 5: Docker Container Compilation
-- **Role:** Runs Docker Buildx to build the production FastAPI image (`Dockerfile`). If any dependency conflict or file path mismatch exists, the CI pipeline fails before broken images reach production.
+   # OR background service on macOS:
+   ./svc.sh install
+   ./svc.sh start
+   ```
+5. Verify on GitHub under **Settings -> Actions -> Runners** that your Mac shows as **Idle** (green).
+6. Trigger **Local CD - Train, Push to Local MinIO & Reload Runtime** manually from the GitHub **Actions** tab (`Run workflow`), or uncomment the `push:` block in `.github/workflows/local-cd.yml` so every push to `main` or `v2` automatically trains and pushes to your local MinIO, Compose stack, and Kind cluster.
 
 ---
 
-## 4. How to Run the Complete CI Pipeline Locally
+## 4. Detailed Cloud CI Breakdown (`.github/workflows/ci.yml`)
 
-You don't need to push to GitHub to verify your code. You can execute the exact equivalent commands locally via the `Makefile`:
+### Job 1: `code-quality-and-tests` (`ubuntu-latest`)
+1. **Ruff Lint & Format:** Runs `ruff check src/ api/ tests/ scripts/` and `ruff format --check src/ api/ tests/ scripts/`.
+2. **Ephemeral MinIO Container:** Starts `pgsty/silo:latest server /data` on port `9000`, polls `/minio/health/live`, and ensures `dvc-store` and `mlflow-artifacts` buckets exist.
+3. **End-to-End Pipeline & Storage Verification:** Runs `generate_data.py`, `validate_data.py`, `preprocess.py`, `train.py`, `dvc add data/raw/housing.csv`, `dvc push`, and `scripts/push_model_minio.py`, then asserts objects exist in `s3://dvc-store` and `s3://mlflow-artifacts/model/`.
+4. **Pytest Suite:** Executes `pytest -v --durations=10` (20 tests covering validation, preprocessing, metrics, API endpoints, and drift detection).
+
+### Job 2: `validate-k8s-manifests` (`ubuntu-latest`)
+- Renders `kubectl kustomize k8s/` cleanly to catch YAML syntax or Kustomize resource reference issues on every push.
+
+### Job 3: `build-docker-image` (`ubuntu-latest`)
+- Downloads the trained model artifact from Job 1 and builds `./Dockerfile` via Docker Buildx (`push: false`).
+
+---
+
+## 5. How to Run Equivalent Checks Locally via `Makefile`
 
 ```bash
-# 1. Format and lint
+# 1. Format and lint check
 make lint
 
 # 2. Run data pipeline & training
 make pipeline
 
-# 3. Run Pytest suite
+# 3. Push DVC data & trained models to local MinIO
+make dvc-push
+make push-model
+
+# 4. Run Pytest suite
 make test
 
-# 4. Build Docker container
+# 5. Build Docker container & verify Kind deployment
 make docker-build
+make k8s-verify
 ```
-

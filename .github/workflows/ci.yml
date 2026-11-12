@@ -2,13 +2,14 @@ name: MLOps Continuous Integration
 
 on:
   push:
-    branches: [ main, master, "feat/*", "fix/*" ]
+    branches: [ main, master, v2, "feat/*", "fix/*" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, v2 ]
+  workflow_dispatch:
 
 jobs:
   code-quality-and-tests:
-    name: Lint, Test & Validate
+    name: Lint, Train, Ephemeral MinIO & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -26,23 +27,88 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Lint codebase with Ruff
+      - name: Lint and check formatting with Ruff
         run: |
-          ruff check src/ api/ tests/
+          ruff check src/ api/ tests/ scripts/
+          ruff format --check src/ api/ tests/ scripts/
 
-      - name: Validate data pipeline & preprocessing
+      - name: Start ephemeral MinIO (Silo) for CI storage verification
+        run: |
+          docker run -d --name ci-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            pgsty/silo:latest server /data
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              echo "Ephemeral CI MinIO is healthy."
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              docker logs ci-minio
+              exit 1
+            fi
+            sleep 1
+          done
+          python - <<'EOF'
+          import boto3
+          from botocore.exceptions import ClientError
+
+          client = boto3.client(
+              "s3",
+              endpoint_url="http://localhost:9000",
+              aws_access_key_id="minioadmin",
+              aws_secret_access_key="minioadmin",
+              region_name="us-east-1",
+          )
+          for bucket in ("dvc-store", "mlflow-artifacts"):
+              try:
+                  client.head_bucket(Bucket=bucket)
+              except ClientError:
+                  client.create_bucket(Bucket=bucket)
+                  print(f"Created CI bucket: {bucket}")
+          EOF
+
+      - name: Run data, training, DVC push, and MinIO model upload
+        env:
+          MINIO_S3_ENDPOINT: http://localhost:9000
+          MINIO_MLFLOW_BUCKET: mlflow-artifacts
+          AWS_ACCESS_KEY_ID: minioadmin
+          AWS_SECRET_ACCESS_KEY: minioadmin
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           python src/data/generate_data.py --config params.yaml
           python src/data/validate_data.py --config params.yaml
           python src/data/preprocess.py --config params.yaml
-
-      - name: Train and evaluate baseline model
-        run: |
           python src/training/train.py --config params.yaml
+          dvc add data/raw/housing.csv
+          dvc push
+          python scripts/push_model_minio.py
+          python - <<'EOF'
+          import boto3
+
+          client = boto3.client(
+              "s3",
+              endpoint_url="http://localhost:9000",
+              aws_access_key_id="minioadmin",
+              aws_secret_access_key="minioadmin",
+              region_name="us-east-1",
+          )
+          for bucket, prefix in (("dvc-store", ""), ("mlflow-artifacts", "model/")):
+              resp = client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+              keys = [obj["Key"] for obj in resp.get("Contents", [])]
+              print(f"{bucket}/{prefix}: {len(keys)} objects -> {keys[:5]}")
+              assert len(keys) > 0, f"Expected objects in {bucket}/{prefix}"
+          EOF
 
       - name: Run Pytest test suite
         run: |
           pytest -v --durations=10
+
+      - name: Stop ephemeral CI MinIO
+        if: always()
+        run: |
+          docker rm -f ci-minio >/dev/null 2>&1 || true
 
       - name: Upload trained model and reference dataset for Docker build
         uses: actions/upload-artifact@v4
@@ -52,9 +118,28 @@ jobs:
             models/
             data/raw/housing.csv
 
+  validate-k8s-manifests:
+    name: Validate Kubernetes Kustomize Manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Render Kustomize manifests
+        run: |
+          if ! command -v kubectl >/dev/null 2>&1; then
+            KUBECTL_VERSION="$(curl -fsSL https://dl.k8s.io/release/stable.txt)"
+            curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o /tmp/kubectl
+            chmod +x /tmp/kubectl
+            sudo mv /tmp/kubectl /usr/local/bin/kubectl
+          fi
+          kubectl kustomize k8s/ > /tmp/rendered-k8s.yaml
+          echo "Rendered $(wc -l < /tmp/rendered-k8s.yaml) lines of valid Kubernetes YAML."
+
   build-docker-image:
     name: Build & Verify Docker Image
-    needs: code-quality-and-tests
+    needs: [ code-quality-and-tests, validate-k8s-manifests ]
     runs-on: ubuntu-latest
 
     steps:
@@ -78,4 +163,3 @@ jobs:
           tags: mlops-fastapi-service:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
