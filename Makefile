@@ -1,4 +1,4 @@
-.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test clean
+.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test k8s-up k8s-down k8s-status k8s-verify clean
 
 PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
@@ -26,6 +26,10 @@ help:
 	@echo "  make dvc-pull      - Pull dataset version from MinIO remote"
 	@echo "  make push-model    - Upload local models/ artifacts to MinIO model/ folder"
 	@echo "  make predict-test  - Send sample prediction request to running API"
+	@echo "  make k8s-up        - Create Kind cluster, load images, and deploy K8s stack"
+	@echo "  make k8s-status    - Show Kind Kubernetes pods, services, and PVCs"
+	@echo "  make k8s-verify    - Verify all Kind Kubernetes NodePorts & live inference"
+	@echo "  make k8s-down      - Delete the Kind Kubernetes cluster"
 	@echo "  make clean         - Clean temporary cache and log files"
 	@echo "=========================================================================="
 
@@ -99,6 +103,19 @@ push-model:
 
 predict-test:
 	$(PYTHON) scripts/test_prediction.py
+
+k8s-up:
+	bash scripts/k8s_deploy.sh
+
+k8s-status:
+	kubectl get nodes -o wide
+	kubectl get pods,svc,pvc -n mlops-lab -o wide
+
+k8s-verify:
+	$(PYTHON) scripts/verify_k8s.py
+
+k8s-down:
+	kind delete cluster --name mlops-lab
 
 clean:
 	rm -rf .pytest_cache htmlcov .coverage .ruff_cache

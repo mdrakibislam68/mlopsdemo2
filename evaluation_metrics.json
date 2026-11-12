@@ -2,7 +2,7 @@
   "best_model_name": "RandomForestRegressor",
   "selection_metric": "rmse",
   "registered_model_name": "house-price-predictor",
-  "registered_version": "7",
+  "registered_version": "1",
   "models_comparison": {
     "LinearRegression": {
       "test_metrics": {
@@ -17,7 +17,7 @@
         "rmse": 23642.1677,
         "r2_score": 0.9747
       },
-      "run_id": "6c293154599b4b9a9f4421e23f7b6181"
+      "run_id": "d8a6fa2af7424aab95d785d8f5abbfd0"
     },
     "RandomForestRegressor": {
       "test_metrics": {
@@ -32,7 +32,7 @@
         "rmse": 11693.0411,
         "r2_score": 0.9938
       },
-      "run_id": "9c8d7f1b878f4b28aceb117bdd4b6793"
+      "run_id": "bed8ab59c5e443e38bf49496e12607ee"
     }
   }
 }

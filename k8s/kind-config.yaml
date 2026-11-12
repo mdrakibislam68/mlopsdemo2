@@ -1,0 +1,41 @@
+# Kind (Kubernetes in Docker) Multi-Node Cluster Configuration
+# Exposes NodePorts strictly on 127.0.0.1 using 30xxx ports to avoid collisions
+# with Docker Compose services (3000, 5001, 8000, 9000, 9090).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: mlops-lab
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # FastAPI Prediction Service
+      - containerPort: 30800
+        hostPort: 30800
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # MLflow Tracking Server
+      - containerPort: 30500
+        hostPort: 30500
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # MinIO S3 API
+      - containerPort: 30900
+        hostPort: 30900
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # MinIO Web Console
+      - containerPort: 30901
+        hostPort: 30901
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Prometheus Web UI
+      - containerPort: 30909
+        hostPort: 30909
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Grafana Dashboards
+      - containerPort: 30300
+        hostPort: 30300
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+  - role: worker
+

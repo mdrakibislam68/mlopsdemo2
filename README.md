@@ -174,6 +174,30 @@ When data drift is detected or new training batches are collected:
 
 ---
 
+## ☸️ Kubernetes Deployment with Kind
+
+Run the full MLOps stack on a local multi-node Kubernetes cluster (`control-plane` + `worker`) using [Kind](https://kind.sigs.k8s.io/) alongside or instead of Docker Compose:
+
+```bash
+# Create Kind cluster, load custom images, and deploy all 7 services into namespace `mlops-lab`
+make k8s-up
+
+# Check nodes, pods, services, and PVCs
+make k8s-status
+
+# Verify all NodePorts, run live prediction, and confirm Prometheus scraping
+make k8s-verify
+```
+
+Kind service URLs (`127.0.0.1`):
+- **FastAPI Docs:** http://localhost:30800/docs
+- **MLflow UI:** http://localhost:30500
+- **MinIO Console:** http://localhost:30901 (`minioadmin` / `minioadmin`)
+- **Prometheus UI:** http://localhost:30909
+- **Grafana Dashboard:** http://localhost:30300 (`admin` / `admin`)
+
+---
+
 ## 📚 In-Depth Learning Documentation
 
 Detailed technical breakdowns for every component:
@@ -184,6 +208,7 @@ Detailed technical breakdowns for every component:
 - [Model Training & Evaluation](docs/model-training.md)
 - [MLflow Model Registry & Promotion](docs/model-registry.md)
 - [FastAPI Deployment & Docker](docs/deployment.md)
+- [Kubernetes Local Cluster with Kind](docs/kubernetes-kind.md)
 - [Infrastructure vs. ML Monitoring](docs/monitoring.md)
 - [Continuous Integration (CI) Automation](docs/ci-cd.md)
 - [Troubleshooting & Operations Guide](docs/troubleshooting.md)

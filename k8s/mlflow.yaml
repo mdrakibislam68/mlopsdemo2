@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow
+  namespace: mlops-lab
+  labels:
+    app: mlflow
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mlflow
+  template:
+    metadata:
+      labels:
+        app: mlflow
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        - name: wait-for-postgres-and-minio
+          image: mlops-mlflow-server:1.0.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: mlops-config
+            - secretRef:
+                name: mlops-secrets
+          command: ["python", "-c"]
+          args:
+            - |
+              import os, socket, time, boto3
+              while True:
+                  try:
+                      with socket.create_connection(("postgres", 5432), timeout=2):
+                          pass
+                      s3 = boto3.client(
+                          "s3",
+                          endpoint_url=os.environ["MLFLOW_S3_ENDPOINT_URL"],
+                          aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+                          aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+                          region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"),
+                      )
+                      s3.head_bucket(Bucket=os.environ["MINIO_MLFLOW_BUCKET"])
+                      print("[MLflow-Init] PostgreSQL and MinIO bucket ready.")
+                      break
+                  except Exception as exc:
+                      print(f"[MLflow-Init] Waiting for dependencies ({exc})...")
+                      time.sleep(2)
+      containers:
+        - name: mlflow
+          image: mlops-mlflow-server:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: mlops-config
+            - secretRef:
+                name: mlops-secrets
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              mlflow server
+              --host 0.0.0.0
+              --port 5000
+              --workers 1
+              --allowed-hosts "*"
+              --backend-store-uri "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
+              --default-artifact-root "s3://$(MINIO_MLFLOW_BUCKET)/"
+          readinessProbe:
+            exec:
+              command: ["curl", "-f", "http://localhost:5000/"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["curl", "-f", "http://localhost:5000/"]
+            initialDelaySeconds: 25
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mlflow
+  namespace: mlops-lab
+spec:
+  type: NodePort
+  selector:
+    app: mlflow
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      nodePort: 30500
+
