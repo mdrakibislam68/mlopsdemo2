@@ -1,4 +1,4 @@
-.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull predict-test clean
+.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test clean
 
 PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
@@ -24,6 +24,7 @@ help:
 	@echo "  make docker-down   - Stop Docker Compose services"
 	@echo "  make dvc-push      - Push tracked dataset version to MinIO remote"
 	@echo "  make dvc-pull      - Pull dataset version from MinIO remote"
+	@echo "  make push-model    - Upload local models/ artifacts to MinIO model/ folder"
 	@echo "  make predict-test  - Send sample prediction request to running API"
 	@echo "  make clean         - Clean temporary cache and log files"
 	@echo "=========================================================================="
@@ -89,6 +90,12 @@ dvc-pull:
 	AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY:-minioadmin} \
 	AWS_DEFAULT_REGION=$${AWS_DEFAULT_REGION:-us-east-1} \
 	$(DVC) pull
+
+push-model:
+	AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID:-minioadmin} \
+	AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY:-minioadmin} \
+	AWS_DEFAULT_REGION=$${AWS_DEFAULT_REGION:-us-east-1} \
+	$(PYTHON) scripts/push_model_minio.py --models-dir models --bucket $${MINIO_MLFLOW_BUCKET:-mlflow-artifacts} --prefix model
 
 predict-test:
 	$(PYTHON) scripts/test_prediction.py
