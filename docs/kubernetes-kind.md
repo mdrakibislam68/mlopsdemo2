@@ -155,3 +155,21 @@ make kserve-forward
 make kserve-ui
 ```
 
+---
+
+## 10. Standalone Kubeflow Pipelines (KFP Lite)
+
+Standalone Kubeflow Pipelines gives you the official Kubeflow DAG UI, run experiments, artifact tracking, and scheduled recurring workflow orchestration without the overhead of the entire 60+ pod Kubeflow suite:
+
+```bash
+# 1. Install Kubeflow Pipelines on Kind cluster
+make kfp-up
+
+# 2. Check Kubeflow Pipelines pods and status
+make kfp-status
+
+# 3. Port-forward official Kubeflow Pipelines Dashboard
+make kfp-ui
+# Access in browser at: http://localhost:8080
+```
+

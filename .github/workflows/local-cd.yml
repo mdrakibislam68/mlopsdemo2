@@ -152,6 +152,16 @@ jobs:
             kind load docker-image mlops-fastapi-service:1.0.0 --name mlops-lab
             kubectl --context kind-mlops-lab rollout restart deployment/api -n mlops-lab
             kubectl --context kind-mlops-lab rollout status deployment/api -n mlops-lab --timeout=120s
+
+            # Trigger Kubeflow Pipeline run if KFP is running in Kind
+            if kubectl --context kind-mlops-lab get svc/ml-pipeline-ui -n kubeflow >/dev/null 2>&1; then
+              echo "Triggering Kubeflow Pipeline run with new params..."
+              kubectl --context kind-mlops-lab port-forward svc/ml-pipeline-ui -n kubeflow 8080:80 >/tmp/kfp-action-pf.log 2>&1 &
+              KFP_PF_PID=$!
+              sleep 3
+              python pipelines/run_pipeline.py || echo "KFP trigger warning: non-fatal"
+              kill ${KFP_PF_PID} 2>/dev/null || true
+            fi
           else
             echo "Kind cluster 'mlops-lab' not running; skipping Kind rollout."
           fi

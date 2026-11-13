@@ -1,4 +1,4 @@
-.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test k8s-up k8s-down k8s-status k8s-verify argocd-up argocd-status argocd-password argocd-ui kserve-up kserve-status kserve-forward kserve-ui clean
+.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test k8s-up k8s-down k8s-status k8s-verify argocd-up argocd-status argocd-password argocd-ui kserve-up kserve-status kserve-forward kserve-ui kfp-up kfp-status kfp-ui kfp-compile kfp-run clean
 
 PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
@@ -38,6 +38,11 @@ help:
 	@echo "  make kserve-status - Show KServe InferenceService and predictor pods"
 	@echo "  make kserve-forward - Port-forward KServe predictor to http://localhost:8082"
 	@echo "  make kserve-ui     - Port-forward Kubeflow KServe Models Web UI to http://localhost:8085"
+	@echo "  make kfp-up        - Install Standalone Kubeflow Pipelines (KFP Lite) on Kind"
+	@echo "  make kfp-status    - Show Kubeflow Pipelines pods and services"
+	@echo "  make kfp-ui        - Port-forward Kubeflow Pipelines Dashboard to http://localhost:8080"
+	@echo "  make kfp-compile   - Compile Python pipeline definition to YAML"
+	@echo "  make kfp-run       - Upload pipeline and trigger an experiment run in KFP"
 	@echo "  make clean         - Clean temporary cache and log files"
 	@echo "=========================================================================="
 
@@ -148,6 +153,21 @@ kserve-forward:
 
 kserve-ui:
 	kubectl port-forward svc/kserve-models-web-application -n kserve 8085:80
+
+kfp-up:
+	bash scripts/kfp_setup.sh
+
+kfp-status:
+	kubectl get pods,svc -n kubeflow
+
+kfp-ui:
+	kubectl port-forward svc/ml-pipeline-ui -n kubeflow 8080:80
+
+kfp-compile:
+	$(PYTHON) pipelines/house_price_pipeline.py
+
+kfp-run:
+	$(PYTHON) pipelines/run_pipeline.py
 
 clean:
 	rm -rf .pytest_cache htmlcov .coverage .ruff_cache
