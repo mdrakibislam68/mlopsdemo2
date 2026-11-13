@@ -52,6 +52,15 @@ def upload_models_to_minio(
         s3.upload_file(str(file_path), bucket, object_key)
         uploaded.append(object_key)
 
+    # Also publish best_model.joblib as kserve-model/model.joblib for KServe sklearnserver
+    # (sklearnserver passes NumPy arrays, so the numeric estimator works directly without DataFrame column names)
+    best_model_path = models_path / "best_model.joblib"
+    if best_model_path.is_file():
+        kserve_key = "kserve-model/model.joblib"
+        print(f"[MinIO] Uploading '{best_model_path}' -> 's3://{bucket}/{kserve_key}'...")
+        s3.upload_file(str(best_model_path), bucket, kserve_key)
+        uploaded.append(kserve_key)
+
     print(f"[MinIO] Uploaded {len(uploaded)} model file(s) successfully.")
     return uploaded
 

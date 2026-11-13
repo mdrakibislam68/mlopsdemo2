@@ -135,3 +135,23 @@ make argocd-password
 make argocd-ui
 ```
 
+---
+
+## 9. KServe Model Serving (Standard / RawDeployment Mode)
+
+KServe (`v0.21.0`) serves `s3://mlflow-artifacts/kserve-model/model.joblib` directly from Kind MinIO using `InferenceService` [`k8s/kserve/inference-service.yaml`](../k8s/kserve/inference-service.yaml), without requiring Knative or Istio:
+
+```bash
+# 1. Install cert-manager + KServe and deploy InferenceService 'house-price-kserve'
+make kserve-up
+
+# 2. Check InferenceService and predictor pod status
+make kserve-status
+
+# 3. Port-forward KServe predictor to http://localhost:8082
+make kserve-forward
+
+# 4. Port-forward Kubeflow KServe Models Web UI to http://localhost:8085
+make kserve-ui
+```
+

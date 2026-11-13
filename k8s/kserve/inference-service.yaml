@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kserve-minio-secret
+  namespace: mlops-lab
+  annotations:
+    serving.kserve.io/s3-endpoint: minio.mlops-lab.svc.cluster.local:9000
+    serving.kserve.io/s3-usehttps: "0"
+    serving.kserve.io/s3-region: us-east-1
+    serving.kserve.io/s3-useanoncredential: "false"
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: minioadmin
+  AWS_SECRET_ACCESS_KEY: minioadmin
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kserve-minio-sa
+  namespace: mlops-lab
+secrets:
+  - name: kserve-minio-secret
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: house-price-kserve
+  namespace: mlops-lab
+  annotations:
+    serving.kserve.io/deploymentMode: Standard
+spec:
+  predictor:
+    serviceAccountName: kserve-minio-sa
+    model:
+      modelFormat:
+        name: sklearn
+      storageUri: s3://mlflow-artifacts/kserve-model
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+

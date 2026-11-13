@@ -1,4 +1,4 @@
-.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test k8s-up k8s-down k8s-status k8s-verify argocd-up argocd-status argocd-password argocd-ui clean
+.PHONY: help setup data validate preprocess train test lint run-api docker-up docker-down docker-build dvc-push dvc-pull push-model predict-test k8s-up k8s-down k8s-status k8s-verify argocd-up argocd-status argocd-password argocd-ui kserve-up kserve-status kserve-forward kserve-ui clean
 
 PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
@@ -34,6 +34,10 @@ help:
 	@echo "  make argocd-status - Show Argo CD pods and Application sync status"
 	@echo "  make argocd-password - Print initial Argo CD admin password"
 	@echo "  make argocd-ui     - Port-forward Argo CD UI to https://localhost:8081"
+	@echo "  make kserve-up     - Install KServe (Standard mode) & deploy InferenceService"
+	@echo "  make kserve-status - Show KServe InferenceService and predictor pods"
+	@echo "  make kserve-forward - Port-forward KServe predictor to http://localhost:8082"
+	@echo "  make kserve-ui     - Port-forward Kubeflow KServe Models Web UI to http://localhost:8085"
 	@echo "  make clean         - Clean temporary cache and log files"
 	@echo "=========================================================================="
 
@@ -132,6 +136,18 @@ argocd-password:
 
 argocd-ui:
 	kubectl port-forward svc/argocd-server -n argocd 8081:443
+
+kserve-up:
+	bash scripts/kserve_setup.sh
+
+kserve-status:
+	kubectl get inferenceservice,pods -n mlops-lab
+
+kserve-forward:
+	kubectl port-forward svc/house-price-kserve-predictor -n mlops-lab 8082:80
+
+kserve-ui:
+	kubectl port-forward svc/kserve-models-web-application -n kserve 8085:80
 
 clean:
 	rm -rf .pytest_cache htmlcov .coverage .ruff_cache
