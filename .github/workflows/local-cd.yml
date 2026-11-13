@@ -59,11 +59,11 @@ jobs:
           fi
           set +a
 
-          if ! curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; then
-            echo "Local MinIO not reachable on localhost:9000; starting core Compose services..."
-            docker compose up -d minio minio-init postgres mlflow
+          if ! curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then
+            echo "Local MinIO not responding on 127.0.0.1:9000; restarting/starting Compose services..."
+            docker restart mlops-minio 2>/dev/null || docker compose up -d minio minio-init postgres mlflow
             for i in $(seq 1 30); do
-              if curl -sf http://localhost:9000/minio/health/live >/dev/null 2>&1; then
+              if curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then
                 echo "Local MinIO is healthy."
                 break
               fi
@@ -74,7 +74,7 @@ jobs:
               sleep 2
             done
           else
-            echo "Local MinIO is already healthy at http://localhost:9000."
+            echo "Local MinIO is already healthy at http://127.0.0.1:9000."
           fi
 
       - name: Generate data, run DVC pipeline, train & push to local MinIO
